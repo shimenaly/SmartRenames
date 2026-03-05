@@ -36,9 +36,14 @@ class SmartRenameForm : Form
 
     void DragDropHandler(object sender, DragEventArgs e)
     {
-        string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+        var droppedFiles = e.Data.GetData(DataFormats.FileDrop) as string[];
+        if (droppedFiles == null || droppedFiles.Length == 0)
+        {
+            MessageBox.Show("No valid files were dropped.", "Nothing to do");
+            return;
+        }
 
-        int total = files.Length;
+        int total = droppedFiles.Length;
         int success = 0;
         int skipped = 0;
         int failed = 0;
@@ -46,24 +51,39 @@ class SmartRenameForm : Form
         progressBar.Value = 0;
         progressBar.Maximum = total;
 
-        foreach (string file in files)
+        foreach (string file in droppedFiles)
         {
             try
             {
                 if (!File.Exists(file))
+                {
+                    failed++;
                     continue;
+                }
 
                 FileInfo info = new FileInfo(file);
-                string date = info.LastWriteTime.ToString("yyyy-MM-dd");
+                string datePrefix = info.LastWriteTime.ToString("yyyy-MM-dd") + " ";
 
-                if (info.Name.StartsWith(date + " "))
+                if (info.Name.StartsWith(datePrefix, StringComparison.Ordinal))
                 {
                     skipped++;
                     continue;
                 }
 
-                string newName = date + " " + info.Name;
+                if (string.IsNullOrEmpty(info.DirectoryName))
+                {
+                    failed++;
+                    continue;
+                }
+
+                string newName = datePrefix + info.Name;
                 string newPath = Path.Combine(info.DirectoryName, newName);
+
+                if (File.Exists(newPath))
+                {
+                    failed++;
+                    continue;
+                }
 
                 File.Move(file, newPath);
                 success++;
@@ -72,10 +92,12 @@ class SmartRenameForm : Form
             {
                 failed++;
             }
-
-            progressBar.Value++;
-            statusLabel.Text = "Processing " + progressBar.Value + " / " + total;
-            Application.DoEvents();
+            finally
+            {
+                progressBar.Value++;
+                statusLabel.Text = "Processing " + progressBar.Value + " / " + total;
+                Application.DoEvents();
+            }
         }
 
         MessageBox.Show(
